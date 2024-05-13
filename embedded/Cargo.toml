@@ -1,0 +1,44 @@
+[package]
+name = "what_a_foc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Change stm32f103c8 to your chip name, if necessary.
+embassy-stm32 = { version = "0.1.0", features = [ "defmt", "stm32f103cb", "unstable-pac", "memory-x", "time-driver-any" ]  }
+embassy-sync = { version = "0.5.0", features = ["defmt"] }
+embassy-executor = { version = "0.5.0", features = ["arch-cortex-m", "executor-thread", "defmt", "integrated-timers", "task-arena-size-8192"] }
+embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-1_000_000"] }
+embassy-usb = { version = "0.1.0", features = ["defmt"] }
+embassy-futures = { version = "0.1.0" }
+
+defmt = "0.3"
+defmt-rtt = "0.4"
+
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7.0"
+embedded-hal = "0.2.6"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
+heapless = { version = "0.8", default-features = false }
+nb = "1.0.0"
+
+fixed = { version = "1.26.0", features = ["serde"] }
+cordic = "0.1.5"
+embedded-hal-async = "1.0.0"
+embedded-io = "0.6.1"
+embedded-io-async = "0.6.1"
+
+common = { path = "../common", default-features = false, features = ["embedded"]}
+num-traits = { version = "0.2.18", default-features = false, features = ["libm"] }
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+debug = 2
+lto = true
+# opt-level = "z"
+codegen-units = 1

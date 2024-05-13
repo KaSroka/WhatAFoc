@@ -1,0 +1,367 @@
+import { Button, VerticalBox, HorizontalBox, ComboBox, TabWidget, Slider, GridBox, Switch, ProgressIndicator } from "std-widgets.slint";
+
+export global Properties {
+    in property <[string]> com_ports;
+    in property <bool> connected: false;
+    in property <bool> target_reached: false;
+    in property <string> loop_time: "0s";
+    in property <string> torque: "0 N";
+    in property <string> speed: "0 RPM";
+    in property <string> angle: "0 Deg";
+    in property <string> torque_str: "0.000";
+    in property <string> speed_str: "0.000";
+    in property <string> angle_str: "0.000";
+    // in property <image> calibration;
+    in-out property <length> encoder_calibration_chart_width;
+    in-out property <bool> armed: false;
+    in-out property <float> torque_target;
+    in-out property <float> speed_target;
+    in-out property <float> angle_target;
+    in-out property <string> selected_mode: "Torque control";
+
+    pure callback generate_encoder_calibration_chart(length, length) -> image;
+    pure callback generate_traces_chart(length, length) -> image;
+    callback connect(string);
+    callback update();
+    callback update_torque_str(float);
+    callback update_speed_str(float);
+    callback update_angle_str(float);
+    callback calibrate_encoder();
+}
+
+component Footer {
+    HorizontalLayout {
+        Text {
+            text: {
+                if Properties.target_reached {
+                    @tr("Target reached")
+                } else {
+                    @tr("Target not reached")
+                }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: LayoutAlignment.end;
+        spacing: 10px;
+        Text {
+            text: Properties.angle;
+        }
+
+        Text {
+            text: Properties.speed;
+        }
+
+        Text {
+            text: Properties.torque;
+        }
+
+        Text {
+            text: Properties.loop_time;
+        }
+
+        Text {
+            text: {
+                if Properties.connected {
+                    "Connected"
+                } else {
+                    "Disconnected"
+                }
+            };
+        }
+    }
+}
+
+component ResettableSliderWithValueDisplay {
+    in property <string> title;
+    in-out property <float> value;
+    in property <float> minimum: -1;
+    in property <float> maximum: 1;
+    in property <string> value_str;
+    in property <bool> enabled;
+
+    callback changed();
+
+    HorizontalLayout {
+        spacing: 10px;
+
+        TouchArea {
+            double-clicked => {
+                slider.value = 0;
+                changed();
+            }
+            Text {
+                text: title;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                min-width: 65px;
+            }
+        }
+
+        slider := Slider {
+            minimum: minimum;
+            value <=> value;
+            maximum: maximum;
+            height: 10pt;
+            enabled: enabled;
+            changed => {
+                changed();
+            }
+        }
+
+        Text {
+            text: value_str;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component TorqueControl {
+    in property <bool> enabled: false;
+
+    GridLayout {
+        spacing: 10px;
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Torque");
+                minimum: -0.7;
+                maximum: 0.7;
+                enabled: enabled;
+                value <=> Properties.torque_target;
+                value_str: Properties.torque_str;
+                changed => {
+                    Properties.update_torque_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+    }
+}
+
+component SpeedControl {
+    in property <bool> enabled: false;
+
+    GridLayout {
+        spacing: 10px;
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Max torque");
+                minimum: -0.7;
+                maximum: 0.7;
+                enabled: enabled;
+                value <=> Properties.torque_target;
+                value_str: Properties.torque_str;
+                changed => {
+                    Properties.update_torque_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Speed");
+                minimum: -1000;
+                maximum: 1000;
+                enabled: enabled;
+                value <=> Properties.speed_target;
+                value_str: Properties.speed_str;
+                changed => {
+                    Properties.update_speed_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+    }
+}
+
+component AngleControl {
+    in property <bool> enabled: false;
+
+    GridLayout {
+        spacing: 10px;
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Max torque");
+                minimum: -0.7;
+                maximum: 0.7;
+                enabled: enabled;
+                value <=> Properties.torque_target;
+                value_str: Properties.torque_str;
+                changed => {
+                    Properties.update_torque_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Max speed");
+                minimum: -1000;
+                maximum: 1000;
+                enabled: enabled;
+                value <=> Properties.speed_target;
+                value_str: Properties.speed_str;
+                changed => {
+                    Properties.update_speed_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+
+        Row {
+            ResettableSliderWithValueDisplay {
+                title: @tr("Angle");
+                minimum: -360;
+                maximum: 360;
+                enabled: enabled;
+                value <=> Properties.angle_target;
+                value_str: Properties.angle_str;
+                changed => {
+                    Properties.update_angle_str(self.value);
+                    Properties.update();
+                }
+            }
+        }
+    }
+}
+
+export component RsFocUi inherits Window {
+    // min-height: 200pt;
+    callback update_encoder_calibration_chart <=> encoder-calibration-chart-image.update;
+    callback update_traces_chart <=> traces-chart-image.update;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 10px;
+        HorizontalLayout {
+            spacing: 10px;
+
+            port_list := ComboBox {
+                enabled: self.model.length > 0;
+                model: Properties.com_ports;
+            }
+
+            Button {
+                text: "Connect";
+                enabled: port-list.model.length > 0 && !Properties.connected;
+                clicked => {
+                    Properties.connect(port-list.current-value);
+                }
+            }
+        }
+
+        TabWidget {
+            Tab {
+                title: "Control";
+                VerticalLayout {
+                    // padding: 10px;
+                    padding-top: 10px;
+                    spacing: 10px;
+                    alignment: LayoutAlignment.start;
+
+                    Switch {
+                        text: @tr("Armed");
+                        enabled: Properties.connected;
+                        checked <=> Properties.armed;
+                        toggled => {
+                            Properties.update()
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        Text {
+                            text: @tr("Mode");
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        control_mode := ComboBox {
+                            model: [@tr("Torque control"), @tr("Speed control"), @tr("Angle control")];
+                            enabled: Properties.connected;
+                            current-value <=> Properties.selected_mode;
+                            selected => {
+                                Properties.update();
+                            }
+                        }
+                    }
+
+                    if (control-mode.current-index == 0):
+                    TorqueControl {
+                        enabled: Properties.connected;
+                    }
+                    if (control-mode.current-index == 1):
+                    SpeedControl {
+                        enabled: Properties.connected;
+                    }
+                    if (control-mode.current-index == 2):
+                    AngleControl {
+                        enabled: Properties.connected;
+                    }
+                }
+            }
+
+            Tab {
+                title: "Traces";
+                min-width: 600pt;
+                min-height: 400pt;
+                VerticalLayout {
+                    padding-top: 10px;
+                    spacing: 10px;
+                    alignment: LayoutAlignment.start;
+
+                    traces_chart_image := Image {
+                        callback update();
+                        source: Properties.generate_traces_chart(parent.width, parent.height);
+                        update => {
+                            self.source = Properties.generate_traces_chart(parent.width, parent.height);
+                        }
+                    }
+                }
+            }
+
+            Tab {
+                title: "Encoder calibration";
+                min-width: 600pt;
+                min-height: 400pt;
+                VerticalLayout {
+                    padding-top: 10px;
+                    spacing: 10px;
+                    alignment: LayoutAlignment.start;
+
+                    HorizontalLayout {
+                        padding-top: 10px;
+                        spacing: 10px;
+                        alignment: LayoutAlignment.start;
+                        Text {
+                            text: "Encoder calibration";
+                            vertical-alignment: TextVerticalAlignment.center;
+                        }
+
+                        Button {
+                            text: "Calibrate";
+                            clicked => {
+                                Properties.calibrate_encoder();
+                            }
+                        }
+                    }
+
+                    encoder_calibration_chart_image := Image {
+                        callback update();
+                        source: Properties.generate_encoder_calibration_chart(parent.width, parent.height);
+                        update => {
+                            self.source = Properties.generate_encoder_calibration_chart(parent.width, parent.height);
+                        }
+                    }
+                }
+            }
+        }
+
+        Footer { }
+    }
+}
